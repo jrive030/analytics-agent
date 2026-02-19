@@ -1,15 +1,15 @@
-# Web
-fastapi==0.109.2
-uvicorn[standard]==0.27.1
-python-multipart==0.0.9
+# Web (uvicorn without [standard] to avoid heavy deps that build from source)
+fastapi>=0.109.0
+uvicorn>=0.27.0
+python-multipart>=0.0.9
 
 # Data
-pandas==2.2.0
-openpyxl==3.1.2
-xlrd==2.0.1
+pandas>=2.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.0
 
 # AI / Agent (use OpenAI or set OPENAI_API_KEY)
-openai==1.12.0
+openai>=1.12.0
 
 # Env
-python-dotenv==1.0.1
+python-dotenv>=1.0.0
