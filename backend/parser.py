@@ -1,41 +1,79 @@
 """
-Parse Excel and CSV files into pandas DataFrames.
+Parse Excel and CSV files without pandas (openpyxl, xlrd, csv only).
 Power BI users can export to Excel or CSV and upload those files.
 """
+from __future__ import annotations
+
+import csv
 import io
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+import openpyxl
+import xlrd
 
 
 def parse_upload(content: bytes, filename: str) -> dict[str, Any]:
     """
-    Parse an uploaded file (Excel or CSV) into a dict of sheet/table name -> DataFrame.
-    Returns {"tables": {"Sheet1": <df>, ...}, "schema": <summary>}.
+    Parse an uploaded file (Excel or CSV) into a dict of sheet/table name -> list of dicts.
+    Returns {"tables": {"Sheet1": [{"col1": v1, ...}, ...], ...}, "schema": <summary>}.
     """
     suffix = Path(filename).suffix.lower()
-    tables: dict[str, pd.DataFrame] = {}
+    tables: dict[str, list[dict[str, Any]]] = {}
 
-    if suffix in (".xlsx", ".xls"):
-        # Excel: one DataFrame per sheet
-        excel = pd.ExcelFile(io.BytesIO(content))
-        for sheet in excel.sheet_names:
-            tables[sheet] = pd.read_excel(excel, sheet_name=sheet)
+    if suffix == ".xlsx":
+        wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = list(ws.iter_rows(values_only=True))
+            if not rows:
+                tables[sheet_name] = []
+            else:
+                headers = [str(h) if h is not None else f"_col{i}" for i, h in enumerate(rows[0])]
+                tables[sheet_name] = [
+                    dict(zip(headers, (v if v is not None else "" for v in row)))
+                    for row in rows[1:]
+                ]
+        wb.close()
+    elif suffix == ".xls":
+        book = xlrd.open_workbook(file_contents=content)
+        for i in range(book.nsheets):
+            sheet = book.sheet_by_index(i)
+            rows = [sheet.row_values(j) for j in range(sheet.nrows)]
+            if not rows:
+                tables[sheet.name] = []
+            else:
+                headers = [str(h) if h else f"_col{j}" for j, h in enumerate(rows[0])]
+                tables[sheet.name] = [
+                    dict(zip(headers, (v if v != "" else "" for v in row)))
+                    for row in rows[1:]
+                ]
     elif suffix == ".csv":
-        tables["Sheet1"] = pd.read_csv(io.BytesIO(content))
+        reader = csv.reader(io.StringIO(content.decode("utf-8-sig")))
+        rows = list(reader)
+        if not rows:
+            tables["Sheet1"] = []
+        else:
+            headers = [str(h) if h else f"_col{i}" for i, h in enumerate(rows[0])]
+            tables["Sheet1"] = [
+                dict(zip(headers, (v if v else "" for v in row)))
+                for row in rows[1:]
+            ]
     else:
         raise ValueError(f"Unsupported format: {suffix}. Use .xlsx, .xls, or .csv")
 
     schema = _build_schema(tables)
-    return {"tables": {k: v.to_dict(orient="split") for k, v in tables.items()}, "schema": schema}
+    return {"tables": tables, "schema": schema}
 
 
-def _build_schema(tables: dict[str, pd.DataFrame]) -> str:
+def _build_schema(tables: dict[str, list[dict[str, Any]]]) -> str:
     parts = []
-    for name, df in tables.items():
+    for name, rows in tables.items():
         parts.append(f"Table: {name}")
-        parts.append(f"  Rows: {len(df)}, Columns: {list(df.columns)}")
-        parts.append(f"  Dtypes: {df.dtypes.astype(str).to_dict()}")
+        if not rows:
+            parts.append("  Rows: 0, Columns: []")
+        else:
+            cols = list(rows[0].keys())
+            parts.append(f"  Rows: {len(rows)}, Columns: {cols}")
         parts.append("")
     return "\n".join(parts).strip()

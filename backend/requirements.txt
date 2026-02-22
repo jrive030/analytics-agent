@@ -1,15 +1,13 @@
-# Web (uvicorn without [standard] to avoid heavy deps that build from source)
+# Web (no pandas/numpy - avoids Render build failures)
 fastapi>=0.109.0
 uvicorn>=0.27.0
 python-multipart>=0.0.9
 
-# Data (versions with wide wheel availability; PIP_ONLY_BINARY used in build)
-numpy==1.24.3
-pandas==2.0.3
+# Data (pure Python or wheels only)
 openpyxl>=3.1.0
 xlrd>=2.0.0
 
-# AI / Agent (use OpenAI or set OPENAI_API_KEY)
+# AI
 openai>=1.12.0
 
 # Env
